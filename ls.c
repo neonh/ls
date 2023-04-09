@@ -5,24 +5,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <pwd.h>
+#include <grp.h>
+#include <time.h>
 
-// #include <pwd.h>
-// #include <grp.h>
-// #include <time.h>
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
 
-#define MODE_STR_LEN                (10U)
+#define HIDDEN_FILE_PREFIX          ('.')
 
 // Permissions
 #define DENIED_CHAR                 ('-')
 #define GROUP_QTY                   (3U)
 #define PERMISSION_QTY              (3U)
 const char PERMISSION[PERMISSION_QTY] = "rwx";
+
+// String lengths
+#define MODE_STR_LEN                (1U + GROUP_QTY*PERMISSION_QTY)
+#define TIME_STR_LEN                (15U)
 
 // File types
 #define REG_FILE                    ('-')
@@ -33,9 +37,8 @@ const char PERMISSION[PERMISSION_QTY] = "rwx";
 #define CHARACTER_CHAR              ('c')
 #define SOCKET_CHAR                 ('s')
 
-
 static void mode_to_str(const mode_t mode, char* const str);
-static void ls_l(const char* const dir);
+static int ls_l(const char* const dir);
 
 
 int main(int argc, const char *argv[])
@@ -63,17 +66,15 @@ int main(int argc, const char *argv[])
             }
         }
         // Output for first directory
-        ls_l(dirname);
+        ret = ls_l(dirname);
 
         // For other directories
         for (int i = 1; i < dir_qty; i++)
         {
             dirname = argv[FIRST_DIR_ARG_NUM + i];
             printf("\n%s:\n", dirname);
-            ls_l(dirname);
+            ret |= ls_l(dirname);
         }
-
-        ret = EXIT_SUCCESS;
     }
     else
     {
@@ -124,7 +125,7 @@ static void mode_to_str(const mode_t mode, char* const str)
     else
     {
         // Shouldn't be here
-        type = ' ';
+        type = 0U;
     }
     str[char_num++] = type;
 
@@ -139,30 +140,70 @@ static void mode_to_str(const mode_t mode, char* const str)
             mask >>= 1;
         }
     }
+    // Terminate string
+    str[char_num] = 0U;
 }
 
-static void ls_l(const char* const dirname)
+static int ls_l(const char* const dirname)
 {
-	struct dirent *d;
-    struct stat st;
-	DIR *dir = opendir(dirname);
+    int ret = EXIT_FAILURE;
+	DIR* dir = opendir(dirname);
 
 	if (dir != NULL)
 	{
+	    struct dirent* d;
+
+        // TODO
+        // 1 find max len of size and links fields
+        // 2 sort names
+
         while ((d = readdir(dir)) != NULL)
         {
             // Ignore hidden
-            if (d->d_name[0] != '.')
+            if (d->d_name[0] != HIDDEN_FILE_PREFIX)
             {
-                if (stat(d->d_name, &st) == 0)
+                struct stat st;
+                struct passwd* user;
+                struct group* group;
+
+                if ((stat(d->d_name, &st) == 0) &&
+                    ((user = getpwuid(st.st_uid)) != NULL) &&
+                    ((group = getgrgid(st.st_gid)) != NULL))
                 {
-                    char mode_str[MODE_STR_LEN];
+                    struct tm* time;
+                    char time_str[TIME_STR_LEN + 1U];
+                    char mode_str[MODE_STR_LEN + 1U];
+
+                    // Mode
                     mode_to_str(st.st_mode, mode_str);
                     printf("%s ", mode_str);
-                    printf(" %s\n", d->d_name);
+
+                    // Links quantity
+                    printf("%ld ", st.st_nlink);
+
+                    // User
+                    printf("%s ", user->pw_name);
+
+                    // Group
+                    printf("%s ", group->gr_name);
+
+                    // Size
+                    printf("%ld ", st.st_size);
+
+                    // Modification time
+                    time = localtime(&st.st_mtime);
+                    strftime(time_str, sizeof(time_str), "%b %e %H:%M", time);
+                    printf("%s ", time_str);
+
+                    // Name
+                    printf("%s\n", d->d_name);
+
+                    ret = EXIT_SUCCESS;
                 }
             }
         }
         closedir(dir);
     }
+
+    return ret;
 }
