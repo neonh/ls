@@ -4,12 +4,37 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+// #include <pwd.h>
+// #include <grp.h>
+// #include <time.h>
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
 
+#define MODE_STR_LEN                (10U)
 
+// Permissions
+#define DENIED_CHAR                 ('-')
+#define GROUP_QTY                   (3U)
+#define PERMISSION_QTY              (3U)
+const char PERMISSION[PERMISSION_QTY] = "rwx";
+
+// File types
+#define REG_FILE                    ('-')
+#define DIR_CHAR                    ('d')
+#define LINK_CHAR                   ('l')
+#define BLOCK_CHAR                  ('b')
+#define PIPE_CHAR                   ('p')
+#define CHARACTER_CHAR              ('c')
+#define SOCKET_CHAR                 ('s')
+
+
+static void mode_to_str(const mode_t mode, char* const str);
 static void ls_l(const char* const dir);
 
 
@@ -59,9 +84,67 @@ int main(int argc, const char *argv[])
 }
 
 
+static void mode_to_str(const mode_t mode, char* const str)
+{
+    // Number of char in output string
+    uint8_t char_num = 0U;
+    // Bit mask to read permissions
+    mode_t mask = S_IRUSR;
+    // File type
+    char type;
+
+    if (S_ISREG(mode))
+    {
+        type = REG_FILE;
+    }
+    else if (S_ISDIR(mode))
+    {
+        type = DIR_CHAR;
+    }
+    else if (S_ISLNK(mode))
+    {
+        type = LINK_CHAR;
+    }
+    else if (S_ISBLK(mode))
+    {
+        type = BLOCK_CHAR;
+    }
+    else if (S_ISFIFO(mode))
+    {
+        type = PIPE_CHAR;
+    }
+    else if (S_ISCHR(mode))
+    {
+        type = CHARACTER_CHAR;
+    }
+    // else if (S_ISSOCK(mode))
+    // {
+    //     type = SOCKET_CHAR;
+    // }
+    else
+    {
+        // Shouldn't be here
+        type = ' ';
+    }
+    str[char_num++] = type;
+
+    // Permissions
+    for (uint8_t g = 0U; g < GROUP_QTY; g++)
+    {
+        for (uint8_t i = 0U; i < PERMISSION_QTY; i++)
+        {
+            // Set permission
+            str[char_num++] = (mode & mask)? PERMISSION[i]: DENIED_CHAR;
+            // Move to next bit
+            mask >>= 1;
+        }
+    }
+}
+
 static void ls_l(const char* const dirname)
 {
 	struct dirent *d;
+    struct stat st;
 	DIR *dir = opendir(dirname);
 
 	if (dir != NULL)
@@ -71,7 +154,13 @@ static void ls_l(const char* const dirname)
             // Ignore hidden
             if (d->d_name[0] != '.')
             {
-                printf("%s\n", d->d_name);
+                if (stat(d->d_name, &st) == 0)
+                {
+                    char mode_str[MODE_STR_LEN];
+                    mode_to_str(st.st_mode, mode_str);
+                    printf("%s ", mode_str);
+                    printf(" %s\n", d->d_name);
+                }
             }
         }
         closedir(dir);
