@@ -35,7 +35,7 @@ const char PERMISSION[PERMISSION_QTY] = "rwx";
 #define BLOCK_CHAR                  ('b')
 #define PIPE_CHAR                   ('p')
 #define CHARACTER_CHAR              ('c')
-#define SOCKET_CHAR                 ('s')
+//#define SOCKET_CHAR                 ('s')
 
 static void mode_to_str(const mode_t mode, char* const str);
 static int ls_l(const char* const dir);
@@ -49,7 +49,7 @@ int main(int argc, const char *argv[])
 	if ((argc >= MIN_ARG_QTY) &&
         (argv[1][0] == '-') &&
         (argv[1][1] == 'l') &&
-        (argv[1][2] == 0U))
+        (argv[1][2] == '\0'))
 	{
         int dir_qty = argc - FIRST_DIR_ARG_NUM;
         // Default directory
@@ -118,14 +118,9 @@ static void mode_to_str(const mode_t mode, char* const str)
     {
         type = CHARACTER_CHAR;
     }
-    // else if (S_ISSOCK(mode))
-    // {
-    //     type = SOCKET_CHAR;
-    // }
     else
     {
-        // Shouldn't be here
-        type = 0U;
+        type = '?';
     }
     str[char_num++] = type;
 
@@ -141,7 +136,7 @@ static void mode_to_str(const mode_t mode, char* const str)
         }
     }
     // Terminate string
-    str[char_num] = 0U;
+    str[char_num] = '\0';
 }
 
 static int ls_l(const char* const dirname)
@@ -160,7 +155,7 @@ static int ls_l(const char* const dirname)
         while ((d = readdir(dir)) != NULL)
         {
             // Ignore hidden
-            if (d->d_name[0] != HIDDEN_FILE_PREFIX)
+            if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
             {
                 struct stat st;
                 struct passwd* user;
