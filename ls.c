@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <string.h>
 #include <dirent.h>
 #include <pwd.h>
 #include <grp.h>
@@ -37,7 +38,29 @@ const char PERMISSION[PERMISSION_QTY] = "rwx";
 #define CHARACTER_CHAR              ('c')
 //#define SOCKET_CHAR                 ('s')
 
+// Number for initial memory allocation
+#define INIT_FILES_QTY              (64U)
+// Maximum allowed lengthes for filenames and usernames
+#define FNAME_LEN_MAX               (255U)
+#define USERNAME_LEN_MAX            (32U)
+
+// File info structure
+typedef struct f_info_st
+{
+    char fname[FNAME_LEN_MAX + 1U];
+    char user[USERNAME_LEN_MAX + 1U];
+    char group[USERNAME_LEN_MAX + 1U];
+    nlink_t nlink;
+    off_t size;
+    time_t mtime;
+    mode_t mode;
+
+} f_info_t;
+
+
 static void mode_to_str(const mode_t mode, char* const str);
+static int cmp_fn(const void* f1, const void* f2);
+static void print_file_info(const f_info_t* const f);
 static int ls_l(const char* const dir);
 
 
@@ -139,6 +162,42 @@ static void mode_to_str(const mode_t mode, char* const str)
     str[char_num] = '\0';
 }
 
+static int cmp_fn(const void* f1, const void* f2)
+{
+    return strcmp(((f_info_t*)f1)->fname, ((f_info_t*)f2)->fname);
+}
+
+static void print_file_info(const f_info_t* const f)
+{
+    struct tm* time;
+    char time_str[TIME_STR_LEN + 1U];
+    char mode_str[MODE_STR_LEN + 1U];
+
+    // Mode
+    mode_to_str(f->mode, mode_str);
+    printf("%s ", mode_str);
+
+    // Links quantity
+    printf("%ld ", f->nlink);
+
+    // User
+    printf("%s ", f->user);
+
+    // Group
+    printf("%s ", f->group);
+
+    // Size
+    printf("%ld ", f->size);
+
+    // Modification time
+    time = localtime(&f->mtime);
+    strftime(time_str, sizeof(time_str), "%b %e %H:%M", time);
+    printf("%s ", time_str);
+
+    // Name
+    printf("%s\n", f->fname);
+}
+
 static int ls_l(const char* const dirname)
 {
     int ret = EXIT_FAILURE;
@@ -148,10 +207,17 @@ static int ls_l(const char* const dirname)
 	{
 	    struct dirent* d;
 
+        f_info_t* files;
+        size_t f_cnt = 0U;
+        size_t f_alloc_qty = INIT_FILES_QTY;
+
         // TODO
         // 1 find max len of size and links fields
-        // 2 sort names
+        size_t max_fname_len = 0U;
 
+        files = malloc(sizeof(f_info_t) * f_alloc_qty);
+
+        // Read
         while ((d = readdir(dir)) != NULL)
         {
             // Ignore hidden
@@ -165,39 +231,48 @@ static int ls_l(const char* const dirname)
                     ((user = getpwuid(st.st_uid)) != NULL) &&
                     ((group = getgrgid(st.st_gid)) != NULL))
                 {
-                    struct tm* time;
-                    char time_str[TIME_STR_LEN + 1U];
-                    char mode_str[MODE_STR_LEN + 1U];
+                    size_t len;
 
-                    // Mode
-                    mode_to_str(st.st_mode, mode_str);
-                    printf("%s ", mode_str);
+                    if (f_cnt == f_alloc_qty)
+                    {
+                        // Increase memory for files structures
+                        f_alloc_qty *= 2U;
+                        files = realloc(files, sizeof(f_info_t) * f_alloc_qty);
+                    }
 
-                    // Links quantity
-                    printf("%ld ", st.st_nlink);
+                    // Copy file info
+                    files[f_cnt].mode = st.st_mode;
+                    files[f_cnt].nlink = st.st_nlink;
+                    strcpy(files[f_cnt].user, user->pw_name);
+                    strcpy(files[f_cnt].group, group->gr_name);
+                    files[f_cnt].size = st.st_size;
+                    strcpy(files[f_cnt].fname, d->d_name);
 
-                    // User
-                    printf("%s ", user->pw_name);
+                    // TODO
+                    len = strlen(d->d_name);
+                    max_fname_len = (len > max_fname_len)? len: max_fname_len;
 
-                    // Group
-                    printf("%s ", group->gr_name);
-
-                    // Size
-                    printf("%ld ", st.st_size);
-
-                    // Modification time
-                    time = localtime(&st.st_mtime);
-                    strftime(time_str, sizeof(time_str), "%b %e %H:%M", time);
-                    printf("%s ", time_str);
-
-                    // Name
-                    printf("%s\n", d->d_name);
-
-                    ret = EXIT_SUCCESS;
+                    // Increase number of files
+                    f_cnt++;
                 }
             }
         }
         closedir(dir);
+
+        // Sort
+        if (f_cnt > 1U)
+        {
+            qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
+        }
+
+        // Print
+        for (size_t i = 0U; i < f_cnt; i++)
+        {
+            print_file_info(&files[i]);
+        }
+        free(files);
+
+        ret = EXIT_SUCCESS;
     }
 
     return ret;
