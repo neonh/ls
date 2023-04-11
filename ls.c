@@ -15,7 +15,8 @@
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
 #define BYTES_IN_KB                 (1024U)
-
+#define DECIMAL_BASE                (10U)
+#define TIME_FORMAT                 ("%b %e %H:%M")
 #define HIDDEN_FILE_PREFIX          ('.')
 
 // Permissions
@@ -259,14 +260,14 @@ static int cmp_fn(const void* f1, const void* f2)
 // Print info from files struct
 static void print_files_info(const f_info_t* const files, const size_t qty)
 {
-    off_t max_size = 10;
-    size_t max_size_len = 1U;
-    nlink_t max_nlink = 10U;
-    size_t max_nlink_len = 1U;
-    size_t max_user_len = 1U;
-    size_t max_group_len = 1U;
+    off_t max_size = 0;
+    nlink_t max_nlink = 0U;
+    size_t max_size_len = 0U;
+    size_t max_nlink_len = 0U;
+    size_t max_user_len = 0U;
+    size_t max_group_len = 0U;
 
-    // Find max lengths of print fields
+    // Find max lengths of print fields and max numeric values
     for (size_t i = 0U; i < qty; i++)
     {
         const f_info_t* f = &files[i];
@@ -278,17 +279,20 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         len = strlen(f->group);
         if (len > max_group_len) max_group_len = len;
 
-        if (f->nlink >= max_nlink)
-        {
-            max_nlink *= 10U;
-            max_nlink_len++;
-        }
+        if (f->nlink > max_nlink) max_nlink = f->nlink;
 
-        if (f->size >= max_size)
-        {
-            max_size *= 10U;
-            max_size_len++;
-        }
+        if (f->size > max_size) max_size = f->size;
+    }
+    // Calculate max length of numeric fields
+    while (max_size > 0)
+    {
+        max_size /= DECIMAL_BASE;
+        max_size_len++;
+    }
+    while (max_nlink > 0U)
+    {
+        max_nlink /= DECIMAL_BASE;
+        max_nlink_len++;
     }
 
     // Print
@@ -317,7 +321,7 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
 
         // Modification time
         time = localtime(&f->mtime);
-        strftime(time_str, sizeof(time_str), "%b %e %H:%M", time);
+        strftime(time_str, sizeof(time_str), TIME_FORMAT, time);
         printf("%s ", time_str);
 
         // Name
