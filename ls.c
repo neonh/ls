@@ -14,6 +14,7 @@
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
+#define BYTES_IN_KB                 (1024U)
 
 #define HIDDEN_FILE_PREFIX          ('.')
 
@@ -116,10 +117,17 @@ static int ls_l(const char* const dirname)
 	if (dir != NULL)
 	{
 	    struct dirent* d;
+        struct stat st;
 
         f_info_t* files;
         size_t f_cnt = 0U;
         size_t f_alloc_qty = INIT_FILES_QTY;
+        off_t total_blocks = 0;
+        off_t block_size;
+
+        // Get block size
+        stat(".", &st);
+        block_size = st.st_blksize;
 
         files = malloc(sizeof(f_info_t) * f_alloc_qty);
 
@@ -129,7 +137,6 @@ static int ls_l(const char* const dirname)
             // Ignore hidden
             if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
             {
-                struct stat st;
                 struct passwd* user;
                 struct group* group;
 
@@ -155,6 +162,12 @@ static int ls_l(const char* const dirname)
                     files[f_cnt].mtime = st.st_mtime;
                     strcpy(files[f_cnt].fname, d->d_name);
 
+                    // Count blocks
+                    if (st.st_size > 0)
+                    {
+                        total_blocks += ((st.st_size - 1) / block_size) + 1;
+                    }
+
                     // Increase number of files
                     f_cnt++;
                 }
@@ -169,8 +182,7 @@ static int ls_l(const char* const dirname)
         }
 
         // Print
-        // TODO print total blocks numbers
-
+        printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
         print_files_info(files, f_cnt);
         free(files);
 
