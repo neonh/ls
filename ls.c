@@ -18,10 +18,6 @@
 #define BYTES_IN_KB                 (1024U)
 #define DECIMAL_BASE                (10U)
 #define HIDDEN_FILE_PREFIX          ('.')
-#define DATE_TIME_FORMAT            ("%b %e %H:%M")
-// TODO format with year!
-#define DATE_YEAR_FORMAT            ("%b %e  %Y")
-
 
 // Permissions
 #define DENIED_CHAR                 ('-')
@@ -32,6 +28,10 @@ const char PERMISSION[PERMISSION_QTY] = "rwx";
 // String lengths
 #define MODE_STR_LEN                (1U + GROUP_QTY*PERMISSION_QTY)
 #define TIME_STR_LEN                (15U)
+
+// Date formats
+const char DATE_TIME_FORMAT[] = "%b %e %H:%M";
+const char DATE_YEAR_FORMAT[] = "%b %e  %Y";
 
 // File types
 #define REG_FILE                    ('-')
@@ -307,9 +307,15 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
     for (size_t i = 0U; i < qty; i++)
     {
         const f_info_t* f = &files[i];
-        struct tm* time;
-        char time_str[TIME_STR_LEN + 1U];
+        // File type and permissions
         char mode_str[MODE_STR_LEN + 1U];
+        // Modification time
+        char mtime_str[TIME_STR_LEN + 1U];
+        struct tm* mtime = localtime(&f->mtime);
+        const char* time_fmt;
+        // Current time
+        time_t ct = time(NULL);
+        struct tm* ctime = localtime(&ct);
 
         // Mode
         mode_to_str(f->mode, mode_str);
@@ -328,9 +334,16 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         printf("%*ld ", (int)max_size_len, f->size);
 
         // Modification time
-        time = localtime(&f->mtime);
-        strftime(time_str, sizeof(time_str), DATE_TIME_FORMAT, time);
-        printf("%s ", time_str);
+        if (mtime->tm_year == ctime->tm_year)
+        {
+            time_fmt = DATE_TIME_FORMAT;
+        }
+        else
+        {
+            time_fmt = DATE_YEAR_FORMAT;
+        }
+        strftime(mtime_str, sizeof(mtime_str), time_fmt, mtime);
+        printf("%s ", mtime_str);
 
         // Name
         printf("%s", f->fname);
