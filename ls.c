@@ -1,6 +1,4 @@
-/*
-"ls -l" utility realization
-*/
+/* ls utility realization */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,16 +56,17 @@ typedef struct f_info_st
 } f_info_t;
 
 
+static int ls_l(const char* const dir);
 static void mode_to_str(const mode_t mode, char* const str);
 static int cmp_fn(const void* f1, const void* f2);
 static void print_files_info(const f_info_t* const files, const size_t qty);
-static int ls_l(const char* const dir);
 
 
 int main(int argc, const char *argv[])
 {
     int ret = EXIT_FAILURE;
 
+    // TODO getopt
     // Process only with -l option
 	if ((argc >= MIN_ARG_QTY) &&
         (argv[1][0] == '-') &&
@@ -108,6 +107,81 @@ int main(int argc, const char *argv[])
 }
 
 
+// Function for "ls -l" command - print long info about files in directory
+static int ls_l(const char* const dirname)
+{
+    int ret = EXIT_FAILURE;
+	DIR* dir = opendir(dirname);
+
+	if (dir != NULL)
+	{
+	    struct dirent* d;
+
+        f_info_t* files;
+        size_t f_cnt = 0U;
+        size_t f_alloc_qty = INIT_FILES_QTY;
+
+        files = malloc(sizeof(f_info_t) * f_alloc_qty);
+
+        // Read
+        while ((d = readdir(dir)) != NULL)
+        {
+            // Ignore hidden
+            if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
+            {
+                struct stat st;
+                struct passwd* user;
+                struct group* group;
+
+                if ((stat(d->d_name, &st) == 0) &&
+                    ((user = getpwuid(st.st_uid)) != NULL) &&
+                    ((group = getgrgid(st.st_gid)) != NULL))
+                {
+                    size_t len;
+
+                    if (f_cnt == f_alloc_qty)
+                    {
+                        // Increase memory for files structures
+                        f_alloc_qty *= 2U;
+                        files = realloc(files, sizeof(f_info_t) * f_alloc_qty);
+                    }
+
+                    // Copy file info
+                    files[f_cnt].mode = st.st_mode;
+                    files[f_cnt].nlink = st.st_nlink;
+                    strcpy(files[f_cnt].user, user->pw_name);
+                    strcpy(files[f_cnt].group, group->gr_name);
+                    files[f_cnt].size = st.st_size;
+                    files[f_cnt].mtime = st.st_mtime;
+                    strcpy(files[f_cnt].fname, d->d_name);
+
+                    // Increase number of files
+                    f_cnt++;
+                }
+            }
+        }
+        closedir(dir);
+
+        // Sort
+        if (f_cnt > 1U)
+        {
+            qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
+        }
+
+        // Print
+        // TODO print total blocks numbers
+
+        print_files_info(files, f_cnt);
+        free(files);
+
+        ret = EXIT_SUCCESS;
+    }
+
+    return ret;
+}
+
+
+// Get file type and permissions string from mode value
 static void mode_to_str(const mode_t mode, char* const str)
 {
     // Number of char in output string
@@ -162,11 +236,15 @@ static void mode_to_str(const mode_t mode, char* const str)
     str[char_num] = '\0';
 }
 
+
+// Function for comparing filenames
 static int cmp_fn(const void* f1, const void* f2)
 {
     return strcmp(((f_info_t*)f1)->fname, ((f_info_t*)f2)->fname);
 }
 
+
+// Print info from files struct
 static void print_files_info(const f_info_t* const files, const size_t qty)
 {
     off_t max_size = 10;
@@ -233,74 +311,4 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         // Name
         printf("%s\n", f->fname);
     }
-}
-
-static int ls_l(const char* const dirname)
-{
-    int ret = EXIT_FAILURE;
-	DIR* dir = opendir(dirname);
-
-	if (dir != NULL)
-	{
-	    struct dirent* d;
-
-        f_info_t* files;
-        size_t f_cnt = 0U;
-        size_t f_alloc_qty = INIT_FILES_QTY;
-
-        files = malloc(sizeof(f_info_t) * f_alloc_qty);
-
-        // Read
-        while ((d = readdir(dir)) != NULL)
-        {
-            // Ignore hidden
-            if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
-            {
-                struct stat st;
-                struct passwd* user;
-                struct group* group;
-
-                if ((stat(d->d_name, &st) == 0) &&
-                    ((user = getpwuid(st.st_uid)) != NULL) &&
-                    ((group = getgrgid(st.st_gid)) != NULL))
-                {
-                    size_t len;
-
-                    if (f_cnt == f_alloc_qty)
-                    {
-                        // Increase memory for files structures
-                        f_alloc_qty *= 2U;
-                        files = realloc(files, sizeof(f_info_t) * f_alloc_qty);
-                    }
-
-                    // Copy file info
-                    files[f_cnt].mode = st.st_mode;
-                    files[f_cnt].nlink = st.st_nlink;
-                    strcpy(files[f_cnt].user, user->pw_name);
-                    strcpy(files[f_cnt].group, group->gr_name);
-                    files[f_cnt].size = st.st_size;
-                    files[f_cnt].mtime = st.st_mtime;
-                    strcpy(files[f_cnt].fname, d->d_name);
-
-                    // Increase number of files
-                    f_cnt++;
-                }
-            }
-        }
-        closedir(dir);
-
-        // Sort
-        if (f_cnt > 1U)
-        {
-            qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
-        }
-
-        // Print
-        print_files_info(files, f_cnt);
-        free(files);
-
-        ret = EXIT_SUCCESS;
-    }
-
-    return ret;
 }
