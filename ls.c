@@ -10,14 +10,18 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+#include <unistd.h>
 
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
 #define BYTES_IN_KB                 (1024U)
 #define DECIMAL_BASE                (10U)
-#define TIME_FORMAT                 ("%b %e %H:%M")
 #define HIDDEN_FILE_PREFIX          ('.')
+#define DATE_TIME_FORMAT            ("%b %e %H:%M")
+// TODO format with year!
+#define DATE_YEAR_FORMAT            ("%b %e  %Y")
+
 
 // Permissions
 #define DENIED_CHAR                 ('-')
@@ -36,7 +40,7 @@ const char PERMISSION[PERMISSION_QTY] = "rwx";
 #define BLOCK_CHAR                  ('b')
 #define PIPE_CHAR                   ('p')
 #define CHARACTER_CHAR              ('c')
-//#define SOCKET_CHAR                 ('s')
+#define SOCKET_CHAR                 ('s')
 
 // Number for initial memory allocation
 #define INIT_FILES_QTY              (64U)
@@ -141,7 +145,7 @@ static int ls_l(const char* const dirname)
                 struct passwd* user;
                 struct group* group;
 
-                if ((stat(d->d_name, &st) == 0) &&
+                if ((lstat(d->d_name, &st) == 0) &&
                     ((user = getpwuid(st.st_uid)) != NULL) &&
                     ((group = getgrgid(st.st_gid)) != NULL))
                 {
@@ -227,6 +231,10 @@ static void mode_to_str(const mode_t mode, char* const str)
     else if (S_ISCHR(mode))
     {
         type = CHARACTER_CHAR;
+    }
+    else if (S_ISSOCK(mode))
+    {
+        type = SOCKET_CHAR;
     }
     else
     {
@@ -321,10 +329,21 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
 
         // Modification time
         time = localtime(&f->mtime);
-        strftime(time_str, sizeof(time_str), TIME_FORMAT, time);
+        strftime(time_str, sizeof(time_str), DATE_TIME_FORMAT, time);
         printf("%s ", time_str);
 
         // Name
-        printf("%s\n", f->fname);
+        printf("%s", f->fname);
+
+        // If link - print real path
+        if (S_ISLNK(f->mode))
+        {
+            char link_path[FILENAME_MAX];
+            memset(link_path, '\0', FILENAME_MAX);
+            readlink(f->fname, link_path, FILENAME_MAX);
+
+            printf(" -> %s", link_path);
+        }
+        printf("\n");
     }
 }
