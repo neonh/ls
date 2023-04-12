@@ -11,6 +11,7 @@
 #include <grp.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 
 #define MIN_ARG_QTY                 (2)
@@ -62,10 +63,11 @@ typedef struct f_info_st
 } f_info_t;
 
 
-static int ls_l(const char* const dir);
+static int  ls_l(const char* const dir);
 static void mode_to_str(const mode_t mode, char* const str);
-static int cmp_fn(const void* f1, const void* f2);
-static void print_files_info(const f_info_t* const files, const size_t qty);
+static int  cmp_fn(const void* f1, const void* f2);
+static void print_info(const char* const dirname, const f_info_t* const files, const size_t qty);
+static void get_abs_name(char* abs_name, const char* const dirname, const char* const fname);
 
 
 int main(int argc, const char *argv[])
@@ -144,8 +146,11 @@ static int ls_l(const char* const dirname)
             {
                 struct passwd* user;
                 struct group* group;
+                char abs_name[FILENAME_MAX + 1U];
 
-                if ((lstat(d->d_name, &st) == 0) &&
+                get_abs_name(abs_name, dirname, d->d_name);
+
+                if ((lstat(abs_name, &st) == 0) &&
                     ((user = getpwuid(st.st_uid)) != NULL) &&
                     ((group = getgrgid(st.st_gid)) != NULL))
                 {
@@ -188,7 +193,7 @@ static int ls_l(const char* const dirname)
         // Print total size in 1KB blocks
         printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
         // Print files list
-        print_files_info(files, f_cnt);
+        print_info(dirname, files, f_cnt);
         free(files);
 
         ret = EXIT_SUCCESS;
@@ -266,7 +271,7 @@ static int cmp_fn(const void* f1, const void* f2)
 
 
 // Print info from files struct
-static void print_files_info(const f_info_t* const files, const size_t qty)
+static void print_info(const char* const dirname, const f_info_t* const files, const size_t qty)
 {
     off_t max_size = 0;
     nlink_t max_nlink = 0U;
@@ -352,12 +357,31 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         // If link - print real path
         if (S_ISLNK(f->mode))
         {
-            char link_path[FILENAME_MAX];
+            char abs_name[FILENAME_MAX + 1U];
+            char link_path[FILENAME_MAX + 1U];
+
+            get_abs_name(abs_name, dirname, f->fname);
             memset(link_path, '\0', FILENAME_MAX);
-            readlink(f->fname, link_path, FILENAME_MAX);
+            readlink(abs_name, link_path, FILENAME_MAX);
 
             printf(" -> %s", link_path);
         }
         printf("\n");
+    }
+}
+
+
+// Get absolute filename
+static void get_abs_name(char* abs_name, const char* const dirname, const char* const fname)
+{
+    if ((fname[0] == '/') ||
+        (dirname[0] == '\0'))
+    {
+        abs_name = (char*)fname;
+    }
+    else
+    {
+        strcpy(abs_name, dirname);
+        strcat(abs_name, fname);
     }
 }
