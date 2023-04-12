@@ -11,7 +11,10 @@
 #include <grp.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
+
+const char PROG_NAME[] = "ls";
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
@@ -108,7 +111,7 @@ int main(int argc, const char *argv[])
     }
     else
     {
-        fprintf(stderr, "Only -l option is supported\n");
+        fprintf(stderr, "%s: Only '-l' option is supported\n", PROG_NAME);
     }
 
     return ret;
@@ -121,6 +124,7 @@ static int ls_l(const char* const path)
     int ret = EXIT_FAILURE;
     struct stat st;
 
+    errno = 0;
     if (lstat(path, &st) == 0)
     {
         // Check if it is directory or single file
@@ -227,12 +231,18 @@ static int ls_l(const char* const path)
                 strcpy(file.fname, path);
                 // Print file info
                 print_info(CUR_DIR, &file, 1U);
+
+                ret = EXIT_SUCCESS;
             }
         }
     }
     else
     {
-        // TODO error
+        if (errno == ENOENT)
+        {
+            fprintf(stderr, "%s: cannot access '%s': No such file or directory\n",
+                    PROG_NAME, path);
+        }
     }
 
     return ret;
