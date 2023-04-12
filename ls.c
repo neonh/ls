@@ -11,7 +11,6 @@
 #include <grp.h>
 #include <time.h>
 #include <unistd.h>
-#include <errno.h>
 
 
 #define MIN_ARG_QTY                 (2)
@@ -119,84 +118,99 @@ int main(int argc, const char *argv[])
 static int ls_l(const char* const dirname)
 {
     int ret = EXIT_FAILURE;
-	DIR* dir = opendir(dirname);
+    struct stat st;
 
-	if (dir != NULL)
-	{
-	    struct dirent* d;
-        struct stat st;
-
-        f_info_t* files;
-        size_t f_cnt = 0U;
-        size_t f_alloc_qty = INIT_FILES_QTY;
-        off_t total_blocks = 0;
-        off_t block_size;
-
-        // Get block size
-        stat(".", &st);
-        block_size = st.st_blksize;
-
-        files = malloc(sizeof(f_info_t) * f_alloc_qty);
-
-        // Read
-        while ((d = readdir(dir)) != NULL)
+    if (lstat(dirname, &st) == 0)
+    {
+        if (S_ISDIR(st.st_mode))
         {
-            // Ignore hidden
-            if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
+            DIR* dir = opendir(dirname);
+
+            if (dir != NULL)
             {
-                struct passwd* user;
-                struct group* group;
-                char abs_name[FILENAME_MAX + 1U];
+                struct dirent* d;
 
-                get_abs_name(abs_name, dirname, d->d_name);
+                f_info_t* files;
+                size_t f_cnt = 0U;
+                size_t f_alloc_qty = INIT_FILES_QTY;
+                off_t total_blocks = 0;
+                // Get block size
+                off_t block_size = st.st_blksize;
 
-                if ((lstat(abs_name, &st) == 0) &&
-                    ((user = getpwuid(st.st_uid)) != NULL) &&
-                    ((group = getgrgid(st.st_gid)) != NULL))
+                files = malloc(sizeof(f_info_t) * f_alloc_qty);
+
+                // Read
+                while ((d = readdir(dir)) != NULL)
                 {
-                    if (f_cnt == f_alloc_qty)
+                    // Ignore hidden
+                    if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
                     {
-                        // Increase memory for files structures
-                        f_alloc_qty *= 2U;
-                        files = realloc(files, sizeof(f_info_t) * f_alloc_qty);
+                        struct passwd* user;
+                        struct group* group;
+                        char abs_name[FILENAME_MAX + 1U];
+
+                        get_abs_name(abs_name, dirname, d->d_name);
+
+                        if ((lstat(abs_name, &st) == 0) &&
+                            ((user = getpwuid(st.st_uid)) != NULL) &&
+                            ((group = getgrgid(st.st_gid)) != NULL))
+                        {
+                            if (f_cnt == f_alloc_qty)
+                            {
+                                // Increase memory for files structures
+                                f_alloc_qty *= 2U;
+                                files = realloc(files, sizeof(f_info_t) * f_alloc_qty);
+                            }
+
+                            // Copy file info
+                            files[f_cnt].mode = st.st_mode;
+                            files[f_cnt].nlink = st.st_nlink;
+                            strcpy(files[f_cnt].user, user->pw_name);
+                            strcpy(files[f_cnt].group, group->gr_name);
+                            files[f_cnt].size = st.st_size;
+                            files[f_cnt].mtime = st.st_mtime;
+                            strcpy(files[f_cnt].fname, d->d_name);
+
+                            // Count I/O blocks if any st_blocks allocated
+                            // (symlinks could have st_size > 0 but st_blocks == 0)
+                            if (st.st_blocks > 0)
+                            {
+                                total_blocks += ((st.st_size - 1) / block_size) + 1;
+                            }
+
+                            // Increase number of files
+                            f_cnt++;
+                        }
                     }
-
-                    // Copy file info
-                    files[f_cnt].mode = st.st_mode;
-                    files[f_cnt].nlink = st.st_nlink;
-                    strcpy(files[f_cnt].user, user->pw_name);
-                    strcpy(files[f_cnt].group, group->gr_name);
-                    files[f_cnt].size = st.st_size;
-                    files[f_cnt].mtime = st.st_mtime;
-                    strcpy(files[f_cnt].fname, d->d_name);
-
-                    // Count I/O blocks if any st_blocks allocated
-                    // (symlinks could have st_size > 0 but st_blocks == 0)
-                    if (st.st_blocks > 0)
-                    {
-                        total_blocks += ((st.st_size - 1) / block_size) + 1;
-                    }
-
-                    // Increase number of files
-                    f_cnt++;
                 }
+                closedir(dir);
+
+                // Sort
+                if (f_cnt > 1U)
+                {
+                    qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
+                }
+
+                // Print total size in 1KB blocks
+                printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
+                // Print files list
+                print_info(dirname, files, f_cnt);
+                free(files);
+
+                ret = EXIT_SUCCESS;
             }
         }
-        closedir(dir);
-
-        // Sort
-        if (f_cnt > 1U)
+        else
         {
-            qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
+            // TODO ls -l for files??
+
+            // Print files list
+            // print_info(dirname, files, f_cnt);
         }
-
-        // Print total size in 1KB blocks
-        printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
-        // Print files list
-        print_info(dirname, files, f_cnt);
-        free(files);
-
-        ret = EXIT_SUCCESS;
+    }
+    else
+    {
+        // TODO error
     }
 
     return ret;
@@ -374,14 +388,22 @@ static void print_info(const char* const dirname, const f_info_t* const files, c
 // Get absolute filename
 static void get_abs_name(char* abs_name, const char* const dirname, const char* const fname)
 {
-    if ((fname[0] == '/') ||
-        (dirname[0] == '\0'))
+    if (fname[0U] == '/')
     {
         abs_name = (char*)fname;
     }
     else
     {
+        size_t len = strlen(dirname);
         strcpy(abs_name, dirname);
+        // Check if dirname ends with '/'
+        if (dirname[len-1U] != '/')
+        {
+            abs_name[len] = '/';
+            abs_name[len+1U] = '\0';
+
+        }
+        // Concatenate with filename
         strcat(abs_name, fname);
     }
 }
