@@ -18,6 +18,7 @@
 #define BYTES_IN_KB                 (1024U)
 #define DECIMAL_BASE                (10U)
 #define HIDDEN_FILE_PREFIX          ('.')
+const char CUR_DIR[] = ".";
 
 // Permissions
 #define DENIED_CHAR                 ('-')
@@ -62,7 +63,7 @@ typedef struct f_info_st
 } f_info_t;
 
 
-static int  ls_l(const char* const dir);
+static int  ls_l(const char* const path);
 static void mode_to_str(const mode_t mode, char* const str);
 static int  cmp_fn(const void* f1, const void* f2);
 static void print_info(const char* const dirname, const f_info_t* const files, const size_t qty);
@@ -82,27 +83,27 @@ int main(int argc, const char *argv[])
 	{
         int dir_qty = argc - FIRST_DIR_ARG_NUM;
         // Default directory
-        const char* dirname = ".";
+        const char* path = CUR_DIR;
 
         if (dir_qty > 0)
         {
             // If directory name specified
-            dirname = argv[FIRST_DIR_ARG_NUM];
+            path = argv[FIRST_DIR_ARG_NUM];
             if (dir_qty > 1)
             {
                 // If more than one directory specified - print dirname before output
-                printf("%s:\n", dirname);
+                printf("%s:\n", path);
             }
         }
         // Output for first directory
-        ret = ls_l(dirname);
+        ret = ls_l(path);
 
         // For other directories
         for (int i = 1; i < dir_qty; i++)
         {
-            dirname = argv[FIRST_DIR_ARG_NUM + i];
-            printf("\n%s:\n", dirname);
-            ret |= ls_l(dirname);
+            path = argv[FIRST_DIR_ARG_NUM + i];
+            printf("\n%s:\n", path);
+            ret |= ls_l(path);
         }
     }
     else
@@ -115,16 +116,18 @@ int main(int argc, const char *argv[])
 
 
 // Function for "ls -l" command - print long info about files in directory
-static int ls_l(const char* const dirname)
+static int ls_l(const char* const path)
 {
     int ret = EXIT_FAILURE;
     struct stat st;
 
-    if (lstat(dirname, &st) == 0)
+    if (lstat(path, &st) == 0)
     {
+        // Check if it is directory or single file
         if (S_ISDIR(st.st_mode))
         {
-            DIR* dir = opendir(dirname);
+            // Directory
+            DIR* dir = opendir(path);
 
             if (dir != NULL)
             {
@@ -149,7 +152,7 @@ static int ls_l(const char* const dirname)
                         struct group* group;
                         char abs_name[FILENAME_MAX + 1U];
 
-                        get_abs_name(abs_name, dirname, d->d_name);
+                        get_abs_name(abs_name, path, d->d_name);
 
                         if ((lstat(abs_name, &st) == 0) &&
                             ((user = getpwuid(st.st_uid)) != NULL) &&
@@ -194,7 +197,7 @@ static int ls_l(const char* const dirname)
                 // Print total size in 1KB blocks
                 printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
                 // Print files list
-                print_info(dirname, files, f_cnt);
+                print_info(path, files, f_cnt);
                 free(files);
 
                 ret = EXIT_SUCCESS;
@@ -202,10 +205,29 @@ static int ls_l(const char* const dirname)
         }
         else
         {
-            // TODO ls -l for files??
+            // Single file
+            f_info_t file;
+            struct passwd* user;
+            struct group* group;
+            char abs_name[FILENAME_MAX + 1U];
 
-            // Print files list
-            // print_info(dirname, files, f_cnt);
+            get_abs_name(abs_name, CUR_DIR, path);
+
+            if ((lstat(abs_name, &st) == 0) &&
+                ((user = getpwuid(st.st_uid)) != NULL) &&
+                ((group = getgrgid(st.st_gid)) != NULL))
+            {
+                // Copy file info
+                file.mode = st.st_mode;
+                file.nlink = st.st_nlink;
+                strcpy(file.user, user->pw_name);
+                strcpy(file.group, group->gr_name);
+                file.size = st.st_size;
+                file.mtime = st.st_mtime;
+                strcpy(file.fname, path);
+                // Print file info
+                print_info(CUR_DIR, &file, 1U);
+            }
         }
     }
     else
