@@ -15,15 +15,11 @@
 #include <getopt.h>
 
 
-const char PROG_NAME[] = "ls";
-
 // Output formats
 #define LONG_FORMAT                 ('l')
 // Options
 const char OPT_STR[] = {LONG_FORMAT};
 
-#define MIN_ARG_QTY                 (2)
-#define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
 #define BYTES_IN_KB                 (1024U)
 #define DECIMAL_BASE                (10U)
 #define HIDDEN_FILE_PREFIX          ('.')
@@ -77,6 +73,7 @@ static void mode_to_str(const mode_t mode, char* const str);
 static int  cmp_fn(const void* f1, const void* f2);
 static void print_info(const char* const dirname, const f_info_t* const files, const size_t qty);
 static void get_abs_name(char* abs_name, const char* const dirname, const char* const fname);
+static void print_error(const char* const exec_name, const char* const info_str);
 
 
 int main(int argc, char *argv[])
@@ -109,7 +106,7 @@ int main(int argc, char *argv[])
         if (path_qty > 0)
         {
             // If directory (or file) name specified
-            path = argv[FIRST_DIR_ARG_NUM];
+            path = argv[optind];
             if (path_qty > 1)
             {
                 // If more than one directory specified - print path before output
@@ -118,13 +115,19 @@ int main(int argc, char *argv[])
         }
         // Output for first directory
         ret = ls_l(path);
+        if (ret != EXIT_SUCCESS) print_error(argv[0], path);
 
         // For other directories
         for (int i = 1; i < path_qty; i++)
         {
-            path = argv[FIRST_DIR_ARG_NUM + i];
+            int r;
+            path = argv[optind + i];
             printf("\n%s:\n", path);
-            ret |= ls_l(path);
+
+            r = ls_l(path);
+            if (r != EXIT_SUCCESS) print_error(argv[0], path);
+
+            ret |= r;
         }
     }
     else
@@ -252,14 +255,6 @@ static int ls_l(const char* const path)
 
                 ret = EXIT_SUCCESS;
             }
-        }
-    }
-    else
-    {
-        if (errno == ENOENT)
-        {
-            fprintf(stderr, "%s: cannot access '%s': No such file or directory\n",
-                    PROG_NAME, path);
         }
     }
 
@@ -455,5 +450,21 @@ static void get_abs_name(char* abs_name, const char* const dirname, const char* 
         }
         // Concatenate with filename
         strcat(abs_name, fname);
+    }
+}
+
+
+// Print some error info
+static void print_error(const char* const exec_name, const char* const info_str)
+{
+    switch (errno)
+    {
+        case ENOENT:
+            fprintf(stderr, "%s: cannot access '%s': No such file or directory\n",
+                    exec_name, info_str);
+            break;
+
+        default:
+            break;
     }
 }
