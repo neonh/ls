@@ -167,8 +167,9 @@ static int ls_l(const char* const dirname)
                     files[f_cnt].mtime = st.st_mtime;
                     strcpy(files[f_cnt].fname, d->d_name);
 
-                    // Count blocks
-                    if (st.st_size > 0)
+                    // Count I/O blocks if any st_blocks allocated
+                    // (symlinks could have st_size > 0 but st_blocks == 0)
+                    if (st.st_blocks > 0)
                     {
                         total_blocks += ((st.st_size - 1) / block_size) + 1;
                     }
@@ -186,8 +187,9 @@ static int ls_l(const char* const dirname)
             qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
         }
 
-        // Print
+        // Print total size in 1KB blocks
         printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
+        // Print files list
         print_files_info(files, f_cnt);
         free(files);
 
