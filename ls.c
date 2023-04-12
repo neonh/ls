@@ -1,4 +1,4 @@
-/* ls utility realization */
+/* "ls -l" utility realization */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,9 +12,15 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <getopt.h>
 
 
 const char PROG_NAME[] = "ls";
+
+// Output formats
+#define LONG_FORMAT                 ('l')
+// Options
+const char OPT_STR[] = {LONG_FORMAT};
 
 #define MIN_ARG_QTY                 (2)
 #define FIRST_DIR_ARG_NUM           (MIN_ARG_QTY)
@@ -73,28 +79,40 @@ static void print_info(const char* const dirname, const f_info_t* const files, c
 static void get_abs_name(char* abs_name, const char* const dirname, const char* const fname);
 
 
-int main(int argc, const char *argv[])
+int main(int argc, char *argv[])
 {
     int ret = EXIT_FAILURE;
+    int format = -1;
+    int opt;
 
-    // TODO getopt
+    // Read options
+    while ((opt = getopt(argc, argv, OPT_STR)) != -1)
+    {
+        switch (opt)
+        {
+            case LONG_FORMAT:
+                format = opt;
+                break;
+
+            default:
+                break;
+        }
+    }
+
     // Process only with -l option
-	if ((argc >= MIN_ARG_QTY) &&
-        (argv[1][0] == '-') &&
-        (argv[1][1] == 'l') &&
-        (argv[1][2] == '\0'))
+	if (format == LONG_FORMAT)
 	{
-        int dir_qty = argc - FIRST_DIR_ARG_NUM;
+        int path_qty = argc - optind;
         // Default directory
         const char* path = CUR_DIR;
 
-        if (dir_qty > 0)
+        if (path_qty > 0)
         {
-            // If directory name specified
+            // If directory (or file) name specified
             path = argv[FIRST_DIR_ARG_NUM];
-            if (dir_qty > 1)
+            if (path_qty > 1)
             {
-                // If more than one directory specified - print dirname before output
+                // If more than one directory specified - print path before output
                 printf("%s:\n", path);
             }
         }
@@ -102,7 +120,7 @@ int main(int argc, const char *argv[])
         ret = ls_l(path);
 
         // For other directories
-        for (int i = 1; i < dir_qty; i++)
+        for (int i = 1; i < path_qty; i++)
         {
             path = argv[FIRST_DIR_ARG_NUM + i];
             printf("\n%s:\n", path);
@@ -111,7 +129,7 @@ int main(int argc, const char *argv[])
     }
     else
     {
-        fprintf(stderr, "%s: Only '-l' option is supported\n", PROG_NAME);
+        fprintf(stderr, "Usage: %s -l [FILE]...\n", argv[0]);
     }
 
     return ret;
