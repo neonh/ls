@@ -313,11 +313,11 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         char mode_str[MODE_STR_LEN + 1U];
         // Modification time
         char mtime_str[TIME_STR_LEN + 1U];
-        struct tm* mtime = localtime(&f->mtime);
+        struct tm* mtime;
         const char* time_fmt;
         // Current time
         time_t ct = time(NULL);
-        struct tm* ctime = localtime(&ct);
+        int cur_year = localtime(&ct)->tm_year;
 
         // Mode
         mode_to_str(f->mode, mode_str);
@@ -336,7 +336,8 @@ static void print_files_info(const f_info_t* const files, const size_t qty)
         printf("%*ld ", (int)max_size_len, f->size);
 
         // Modification time
-        if (mtime->tm_year == ctime->tm_year)
+        mtime = localtime(&f->mtime);
+        if (mtime->tm_year == cur_year)
         {
             time_fmt = DATE_TIME_FORMAT;
         }
