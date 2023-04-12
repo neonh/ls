@@ -149,8 +149,6 @@ static int ls_l(const char* const dirname)
                     ((user = getpwuid(st.st_uid)) != NULL) &&
                     ((group = getgrgid(st.st_gid)) != NULL))
                 {
-                    size_t len;
-
                     if (f_cnt == f_alloc_qty)
                     {
                         // Increase memory for files structures
