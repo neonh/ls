@@ -1,4 +1,4 @@
-/* "ls -l" utility realization */
+/* Simple "ls" utility realization */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,10 +15,20 @@
 #include <getopt.h>
 
 
-// Output formats
-#define LONG_FORMAT                 ('l')
 // Options
-const char OPT_STR[] = {LONG_FORMAT};
+#define SHOW_HIDDEN_OPT             ('a')
+#define LONG_FORMAT_OPT             ('l')
+const char OPT_STR[] =
+{
+    SHOW_HIDDEN_OPT,
+    LONG_FORMAT_OPT,
+    '\0'
+};
+
+// Output formats
+#define DEFAULT_FORMAT              (0U)
+#define SHOW_HIDDEN                 (1U << 0)
+#define LONG_FORMAT                 (1U << 1)
 
 #define BYTES_IN_KB                 (1024U)
 #define DECIMAL_BASE                (10U)
@@ -68,7 +78,7 @@ typedef struct f_info_st
 } f_info_t;
 
 
-static int  ls_l(const char* const path);
+static int  ls(const char* const path, const uint32_t format);
 static void mode_to_str(const mode_t mode, char* const str);
 static int  cmp_fn(const void* f1, const void* f2);
 static void print_info(const char* const dirname, const f_info_t* const files, const size_t qty);
@@ -78,8 +88,8 @@ static void print_error(const char* const exec_name, const char* const info_str)
 
 int main(int argc, char *argv[])
 {
-    int ret = EXIT_FAILURE;
-    int format = -1;
+    int ret = EXIT_SUCCESS;
+    uint32_t format = DEFAULT_FORMAT;
     int opt;
 
     // Read options
@@ -87,17 +97,21 @@ int main(int argc, char *argv[])
     {
         switch (opt)
         {
-            case LONG_FORMAT:
-                format = opt;
+            case SHOW_HIDDEN_OPT:
+                format |= SHOW_HIDDEN;
+                break;
+
+            case LONG_FORMAT_OPT:
+                format |= LONG_FORMAT;
                 break;
 
             default:
+                ret = EXIT_FAILURE;
                 break;
         }
     }
 
-    // Process only with -l option
-	if (format == LONG_FORMAT)
+	if (ret != EXIT_FAILURE)
 	{
         int path_qty = argc - optind;
         // Default directory
@@ -114,7 +128,7 @@ int main(int argc, char *argv[])
             }
         }
         // Output for first directory
-        ret = ls_l(path);
+        ret = ls(path, format);
         if (ret != EXIT_SUCCESS) print_error(argv[0], path);
 
         // For other directories
@@ -124,7 +138,7 @@ int main(int argc, char *argv[])
             path = argv[optind + i];
             printf("\n%s:\n", path);
 
-            r = ls_l(path);
+            r = ls(path, format);
             if (r != EXIT_SUCCESS) print_error(argv[0], path);
 
             ret |= r;
@@ -132,15 +146,18 @@ int main(int argc, char *argv[])
     }
     else
     {
-        fprintf(stderr, "Usage: %s -l [FILE]...\n", argv[0]);
+        printf("Usage: %s [OPTION]... [FILE]...\n", argv[0]);
+        printf("  List information about the FILEs (the current directory by default).\nOptions:\n");
+        printf("  -a                         do not ignore entries starting with .\n");
+        printf("  -l                         use a long listing format\n");
     }
 
     return ret;
 }
 
 
-// Function for "ls -l" command - print long info about files in directory
-static int ls_l(const char* const path)
+// Function for "ls" command - print info about files in directory
+static int ls(const char* const path, const uint32_t format)
 {
     int ret = EXIT_FAILURE;
     struct stat st;
@@ -170,8 +187,9 @@ static int ls_l(const char* const path)
                 // Read
                 while ((d = readdir(dir)) != NULL)
                 {
-                    // Ignore hidden
-                    if (d->d_name[0U] != HIDDEN_FILE_PREFIX)
+                    // Ignore hidden if without SHOW_HIDDEN option
+                    if ((format & SHOW_HIDDEN) ||
+                        (d->d_name[0U] != HIDDEN_FILE_PREFIX))
                     {
                         struct passwd* user;
                         struct group* group;
@@ -219,10 +237,22 @@ static int ls_l(const char* const path)
                     qsort(files, f_cnt, sizeof(f_info_t), &cmp_fn);
                 }
 
-                // Print total size in 1KB blocks
-                printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
-                // Print files list
-                print_info(path, files, f_cnt);
+                if (format & LONG_FORMAT)
+                {
+                    // Print total size in 1KB blocks
+                    printf("total %ld\n", (total_blocks * block_size) / BYTES_IN_KB);
+                    // Print files list
+                    print_info(path, files, f_cnt);
+                }
+                else
+                {
+                    // Default format
+                    for (size_t i = 0U; i < f_cnt; i++)
+                    {
+                        printf("%s  ", files[i].fname);
+                    }
+                    printf("\n");
+                }
                 free(files);
 
                 ret = EXIT_SUCCESS;
@@ -242,17 +272,24 @@ static int ls_l(const char* const path)
                 ((user = getpwuid(st.st_uid)) != NULL) &&
                 ((group = getgrgid(st.st_gid)) != NULL))
             {
-                // Copy file info
-                file.mode = st.st_mode;
-                file.nlink = st.st_nlink;
-                strcpy(file.user, user->pw_name);
-                strcpy(file.group, group->gr_name);
-                file.size = st.st_size;
-                file.mtime = st.st_mtime;
-                strcpy(file.fname, path);
-                // Print file info
-                print_info(CUR_DIR, &file, 1U);
-
+                if (format & LONG_FORMAT)
+                {
+                    // Copy file info
+                    file.mode = st.st_mode;
+                    file.nlink = st.st_nlink;
+                    strcpy(file.user, user->pw_name);
+                    strcpy(file.group, group->gr_name);
+                    file.size = st.st_size;
+                    file.mtime = st.st_mtime;
+                    strcpy(file.fname, path);
+                    // Print file info
+                    print_info(CUR_DIR, &file, 1U);
+                }
+                else
+                {
+                    // Default format
+                    printf("%s\n", path);
+                }
                 ret = EXIT_SUCCESS;
             }
         }
