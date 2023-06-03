@@ -111,8 +111,8 @@ int main(int argc, char *argv[])
         }
     }
 
-	if (ret != EXIT_FAILURE)
-	{
+    if (ret != EXIT_FAILURE)
+    {
         int path_qty = argc - optind;
         // Default directory
         const char* path = CUR_DIR;
